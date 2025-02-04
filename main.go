@@ -7,7 +7,6 @@ import (
 
 func main() {
 	go servidorp.Run()
-	go servidorr.Do_before_init()
 	go servidorr.Run()
 	select {}
 }

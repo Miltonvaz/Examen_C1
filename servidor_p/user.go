@@ -3,7 +3,7 @@ package servidorp
 import (
 	"fmt"
 	"net/http"
-	"strconv"
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -26,7 +26,12 @@ var (
 )
 
 func sendToReplicationServer(user User, accion string) {
-	url := fmt.Sprintf("http://localhost:5000/replication?user_id=%d&name=%s&user=%s&accion=%s", user.ID, user.Name, user.User, accion)
+	url := fmt.Sprintf("http://localhost:5000/replication?user_id=%d&name=%s&user=%s&accion=%s",
+		user.ID,
+		url.QueryEscape(user.Name),
+		url.QueryEscape(user.User),
+		url.QueryEscape(accion),
+	)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
@@ -36,6 +41,10 @@ func sendToReplicationServer(user User, accion string) {
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("Error replicando el usuario:", resp.Status)
+	}
 }
 
 func sendUserToReplication(c *gin.Context) {
@@ -62,54 +71,6 @@ func createUser(c *gin.Context) {
 	sendToReplicationServer(newUser, "create")
 
 	c.JSON(http.StatusCreated, newUser)
-}
-
-func deleteUser(c *gin.Context) {
-	id := c.Param("id")
-	userIndex := -1
-
-	for i, user := range bd {
-		if strconv.FormatInt(user.ID, 10) == id {
-			userIndex = i
-			cambios = append(cambios, Cambio{Accion: "delete", User: user})
-			sendToReplicationServer(user, "delete")
-			break
-		}
-	}
-
-	if userIndex == -1 {
-		c.JSON(http.StatusNotFound, gin.H{"mensaje": "Usuario no encontrado"})
-		return
-	}
-
-	bd = append(bd[:userIndex], bd[userIndex+1:]...)
-
-	c.JSON(http.StatusOK, gin.H{"mensaje": "Usuario eliminado"})
-}
-
-func updateUser(c *gin.Context) {
-	id := c.Param("id")
-	var updatedUser User
-
-	if err := c.ShouldBindJSON(&updatedUser); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	for i, user := range bd {
-		if strconv.FormatInt(user.ID, 10) == id {
-			updatedUser.ID = user.ID
-			bd[i] = updatedUser
-
-			cambios = append(cambios, Cambio{Accion: "update", User: updatedUser})
-			sendToReplicationServer(updatedUser, "update")
-
-			c.JSON(http.StatusOK, updatedUser)
-			return
-		}
-	}
-
-	c.JSON(http.StatusNotFound, gin.H{"mensaje": "Usuario no encontrado"})
 }
 
 func getUsers(c *gin.Context) {
